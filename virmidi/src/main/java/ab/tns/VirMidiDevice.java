@@ -91,8 +91,10 @@ public class VirMidiDevice implements MidiDevice {
     try (Synthesizer synthesizer = MidiSystem.getSynthesizer(); VirMidiDevice virMidiDevice = new VirMidiDevice()) {
       synthesizer.open();
       virMidiDevice.open();
-      virMidiDevice.getTransmitter().setReceiver(synthesizer.getReceiver());
+      final Transmitter transmitter = virMidiDevice.getTransmitter();
+      transmitter.setReceiver(synthesizer.getReceiver());
       System.in.read();
+      transmitter.setReceiver(null);
     } catch (MidiUnavailableException | IOException e) {
       throw new RuntimeException(e);
     }
