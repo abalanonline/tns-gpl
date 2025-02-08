@@ -153,10 +153,18 @@ public class VirMidi implements AutoCloseable {
     receivers.clear();
   }
 
+  /**
+   * Named after {@link javax.sound.midi.Transmitter#setReceiver}
+   * @param consumer the function that will consume midi messages from device
+   */
   public void setReceiver(Consumer<MidiMessage> consumer) {
     this.consumer = consumer;
   }
 
+  /**
+   * Named after {@link javax.sound.midi.MidiDevice#getReceivers}
+   * @return a list of consumers of midi messages to be sent to device(s)
+   */
   public List<Consumer<MidiMessage>> getReceivers() {
     return receivers;
   }

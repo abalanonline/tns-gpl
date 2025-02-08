@@ -18,38 +18,50 @@
 package ab.tns;
 
 import javax.sound.midi.MidiDevice;
+import javax.sound.midi.MidiMessage;
 import javax.sound.midi.MidiSystem;
 import javax.sound.midi.MidiUnavailableException;
 import javax.sound.midi.Receiver;
 import javax.sound.midi.Synthesizer;
 import javax.sound.midi.Transmitter;
 import java.io.IOException;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+/**
+ * API adapter to use VirMidi as a MidiDevice.
+ */
 public class VirMidiDevice implements MidiDevice {
 
-  private MidiDevice midiDevice;
+  private static final Info DEVICE_INFO = new Info("VirMidiDevice", "TNS", "VirMidi", "1.0") {};
+  private VirMidi virMidi;
+  private final Transmitter transmitter = new DeviceTransmitter();
+  private Receiver receiver;
 
   @Override
   public Info getDeviceInfo() {
-    return null;
+    return DEVICE_INFO;
   }
 
   @Override
-  public void open() throws MidiUnavailableException {
+  public void open() {
+    virMidi = new VirMidi();
+    virMidi.open();
+    virMidi.setReceiver(this::send);
   }
 
   @Override
   public void close() {
-    midiDevice.close();
+    virMidi.setReceiver(null);
+    virMidi.close();
+    virMidi = null;
   }
 
   @Override
   public boolean isOpen() {
-    return midiDevice.isOpen();
+    return virMidi != null;
   }
 
   @Override
@@ -59,32 +71,71 @@ public class VirMidiDevice implements MidiDevice {
 
   @Override
   public int getMaxReceivers() {
-    return 0;
+    final VirMidi virMidi = this.virMidi;
+    return virMidi == null ? 0 : virMidi.getReceivers().size();
   }
 
   @Override
   public int getMaxTransmitters() {
-    return 0;
+    return 1;
+  }
+
+  private void send(MidiMessage message) {
+    final Receiver receiver = this.receiver;
+    if (receiver != null) receiver.send(message, -1);
+  }
+
+  private class DeviceTransmitter implements Transmitter {
+    @Override
+    public void setReceiver(Receiver receiver) {
+      VirMidiDevice.this.receiver = receiver;
+    }
+    @Override
+    public Receiver getReceiver() {
+      return VirMidiDevice.this.receiver;
+    }
+    @Override
+    public void close() {}
+  }
+
+  private class DeviceReceiver implements Receiver {
+    private final Consumer<MidiMessage> consumer;
+    public DeviceReceiver(Consumer<MidiMessage> consumer) {
+      this.consumer = consumer;
+    }
+    @Override
+    public void send(MidiMessage message, long timeStamp) {
+      consumer.accept(message);
+    }
+    @Override
+    public void close() {}
   }
 
   @Override
-  public Receiver getReceiver() throws MidiUnavailableException {
-    return null;
+  public Receiver getReceiver() {
+    final VirMidi virMidi = this.virMidi;
+    if (virMidi == null) return null;
+    final List<Consumer<MidiMessage>> receivers = virMidi.getReceivers();
+    if (receivers.isEmpty()) return null;
+    return new DeviceReceiver(receivers.get(0));
   }
 
   @Override
   public List<Receiver> getReceivers() {
-    return null;
+    final VirMidi virMidi = this.virMidi;
+    if (virMidi == null) return Collections.emptyList();
+    final List<Consumer<MidiMessage>> receivers = virMidi.getReceivers();
+    return receivers.stream().map(DeviceReceiver::new).collect(Collectors.toList());
   }
 
   @Override
-  public Transmitter getTransmitter() throws MidiUnavailableException {
-    return midiDevice.getTransmitter();
+  public Transmitter getTransmitter() {
+    return transmitter;
   }
 
   @Override
   public List<Transmitter> getTransmitters() {
-    return null;
+    return Collections.singletonList(transmitter);
   }
 
   public static void main(String[] args) {
