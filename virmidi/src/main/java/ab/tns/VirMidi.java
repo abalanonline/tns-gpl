@@ -22,6 +22,7 @@ import javax.sound.midi.MidiMessage;
 import javax.sound.midi.MidiSystem;
 import javax.sound.midi.MidiUnavailableException;
 import javax.sound.midi.Receiver;
+import javax.sound.midi.ShortMessage;
 import javax.sound.midi.Synthesizer;
 import javax.sound.midi.Transmitter;
 import java.io.IOException;
@@ -48,8 +49,8 @@ public class VirMidi implements AutoCloseable {
 
   private MidiDevice transmitterDevice;
   private List<MidiDevice> receiverDevices = new ArrayList<>();
-  private List<Consumer<MidiMessage>> receivers = new ArrayList<>();
-  private Consumer<MidiMessage> consumer;
+  private List<Consumer<ShortMessage>> receivers = new ArrayList<>();
+  private Consumer<ShortMessage> consumer;
   private final VirMidiReceiver virMidiReceiver = new VirMidiReceiver();
 
   // midi devices java:
@@ -136,8 +137,11 @@ public class VirMidi implements AutoCloseable {
   private class VirMidiReceiver implements Receiver {
     @Override
     public void send(MidiMessage message, long timeStamp) {
-      final Consumer<MidiMessage> consumer = VirMidi.this.consumer;
-      if (consumer != null) consumer.accept(message);
+      final Consumer<ShortMessage> consumer = VirMidi.this.consumer;
+      if (consumer == null) return;
+      if (!(message instanceof ShortMessage)) return; // discard sysex messages
+      ShortMessage shortMessage = (ShortMessage) message;
+      consumer.accept(shortMessage);
     }
 
     @Override
@@ -157,7 +161,7 @@ public class VirMidi implements AutoCloseable {
    * Named after {@link javax.sound.midi.Transmitter#setReceiver}
    * @param consumer the function that will consume midi messages from device
    */
-  public void setReceiver(Consumer<MidiMessage> consumer) {
+  public void setReceiver(Consumer<ShortMessage> consumer) {
     this.consumer = consumer;
   }
 
@@ -165,7 +169,7 @@ public class VirMidi implements AutoCloseable {
    * Named after {@link javax.sound.midi.MidiDevice#getReceivers}
    * @return a list of consumers of midi messages to be sent to device(s)
    */
-  public List<Consumer<MidiMessage>> getReceivers() {
+  public List<Consumer<ShortMessage>> getReceivers() {
     return receivers;
   }
 
@@ -173,7 +177,7 @@ public class VirMidi implements AutoCloseable {
     try (Synthesizer synthesizer = MidiSystem.getSynthesizer(); VirMidi virMidi = new VirMidi().open()) {
       synthesizer.open();
       final Receiver receiver = synthesizer.getReceiver();
-      virMidi.setReceiver(midiMessage -> receiver.send(midiMessage, -1));
+      virMidi.setReceiver(shortMessage -> receiver.send(shortMessage, -1));
       System.in.read();
       virMidi.setReceiver(null);
     } catch (MidiUnavailableException | IOException e) {

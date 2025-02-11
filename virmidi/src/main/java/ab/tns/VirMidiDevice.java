@@ -22,6 +22,7 @@ import javax.sound.midi.MidiMessage;
 import javax.sound.midi.MidiSystem;
 import javax.sound.midi.MidiUnavailableException;
 import javax.sound.midi.Receiver;
+import javax.sound.midi.ShortMessage;
 import javax.sound.midi.Synthesizer;
 import javax.sound.midi.Transmitter;
 import java.io.IOException;
@@ -80,7 +81,7 @@ public class VirMidiDevice implements MidiDevice {
     return 1;
   }
 
-  private void send(MidiMessage message) {
+  private void send(ShortMessage message) {
     final Receiver receiver = this.receiver;
     if (receiver != null) receiver.send(message, -1);
   }
@@ -98,14 +99,16 @@ public class VirMidiDevice implements MidiDevice {
     public void close() {}
   }
 
-  private class DeviceReceiver implements Receiver {
-    private final Consumer<MidiMessage> consumer;
-    public DeviceReceiver(Consumer<MidiMessage> consumer) {
+  private static class DeviceReceiver implements Receiver {
+    private final Consumer<ShortMessage> consumer;
+    public DeviceReceiver(Consumer<ShortMessage> consumer) {
       this.consumer = consumer;
     }
     @Override
     public void send(MidiMessage message, long timeStamp) {
-      consumer.accept(message);
+      if (!(message instanceof ShortMessage)) return; // discard sysex messages
+      ShortMessage shortMessage = (ShortMessage) message;
+      consumer.accept(shortMessage);
     }
     @Override
     public void close() {}
@@ -115,7 +118,7 @@ public class VirMidiDevice implements MidiDevice {
   public Receiver getReceiver() {
     final VirMidi virMidi = this.virMidi;
     if (virMidi == null) return null;
-    final List<Consumer<MidiMessage>> receivers = virMidi.getReceivers();
+    final List<Consumer<ShortMessage>> receivers = virMidi.getReceivers();
     if (receivers.isEmpty()) return null;
     return new DeviceReceiver(receivers.get(0));
   }
@@ -124,7 +127,7 @@ public class VirMidiDevice implements MidiDevice {
   public List<Receiver> getReceivers() {
     final VirMidi virMidi = this.virMidi;
     if (virMidi == null) return Collections.emptyList();
-    final List<Consumer<MidiMessage>> receivers = virMidi.getReceivers();
+    final List<Consumer<ShortMessage>> receivers = virMidi.getReceivers();
     return receivers.stream().map(DeviceReceiver::new).collect(Collectors.toList());
   }
 
