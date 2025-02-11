@@ -52,6 +52,8 @@ public class VirMidi implements AutoCloseable {
   private List<Consumer<ShortMessage>> receivers = new ArrayList<>();
   private Consumer<ShortMessage> consumer;
   private final VirMidiReceiver virMidiReceiver = new VirMidiReceiver();
+  // convenient public array of the controller values in omni mode
+  public final byte[] controlChange = new byte[128];
 
   // midi devices java:
   // Gervill / OpenJDK / 1.0 / Software MIDI Synthesizer
@@ -137,11 +139,13 @@ public class VirMidi implements AutoCloseable {
   private class VirMidiReceiver implements Receiver {
     @Override
     public void send(MidiMessage message, long timeStamp) {
-      final Consumer<ShortMessage> consumer = VirMidi.this.consumer;
-      if (consumer == null) return;
       if (!(message instanceof ShortMessage)) return; // discard sysex messages
       ShortMessage shortMessage = (ShortMessage) message;
-      consumer.accept(shortMessage);
+      if (shortMessage.getCommand() == ShortMessage.CONTROL_CHANGE) {
+        controlChange[shortMessage.getData1()] = (byte) shortMessage.getData2();
+      }
+      final Consumer<ShortMessage> consumer = VirMidi.this.consumer;
+      if (consumer != null) consumer.accept(shortMessage);
     }
 
     @Override
@@ -177,7 +181,7 @@ public class VirMidi implements AutoCloseable {
     try (Synthesizer synthesizer = MidiSystem.getSynthesizer(); VirMidi virMidi = new VirMidi().open()) {
       synthesizer.open();
       final Receiver receiver = synthesizer.getReceiver();
-      virMidi.setReceiver(shortMessage -> receiver.send(shortMessage, -1));
+      virMidi.setReceiver(message -> receiver.send(message, -1));
       System.in.read();
       virMidi.setReceiver(null);
     } catch (MidiUnavailableException | IOException e) {
