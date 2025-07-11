@@ -54,6 +54,7 @@ public class VirMidi implements AutoCloseable {
   private final VirMidiReceiver virMidiReceiver = new VirMidiReceiver();
   // convenient public array of the controller values in omni mode
   public final byte[] controlChange = new byte[128];
+  public byte lastControlChange;
 
   // midi devices java:
   // Gervill / OpenJDK / 1.0 / Software MIDI Synthesizer
@@ -142,7 +143,9 @@ public class VirMidi implements AutoCloseable {
       if (!(message instanceof ShortMessage)) return; // discard sysex messages
       ShortMessage shortMessage = (ShortMessage) message;
       if (shortMessage.getCommand() == ShortMessage.CONTROL_CHANGE) {
-        controlChange[shortMessage.getData1()] = (byte) shortMessage.getData2();
+        int cc = shortMessage.getData1();
+        controlChange[cc] = (byte) shortMessage.getData2();
+        lastControlChange = (byte) cc;
       }
       final Consumer<ShortMessage> consumer = VirMidi.this.consumer;
       if (consumer != null) consumer.accept(shortMessage);
@@ -177,11 +180,33 @@ public class VirMidi implements AutoCloseable {
     return receivers;
   }
 
+  public static String toString(ShortMessage message) {
+    String status = "unknown";
+    switch (message.getStatus()) {
+      case ShortMessage.START: status = "start"; break;
+      case ShortMessage.STOP: status = "stop"; break;
+      case ShortMessage.TIMING_CLOCK: status = "clock"; break;
+    }
+    switch (message.getCommand()) {
+      case ShortMessage.NOTE_ON: status = "note on"; break;
+      case ShortMessage.NOTE_OFF: status = "note off"; break;
+      case ShortMessage.CONTROL_CHANGE: status = "control change"; break;
+      case ShortMessage.PROGRAM_CHANGE: status = "program change"; break;
+    }
+    String string = String.format("%02X ", message.getStatus());
+    string += message.getLength() > 1 ? String.format("%02X ", message.getData1()) : "   ";
+    string += message.getLength() > 2 ? String.format("%02X ", message.getData2()) : "   ";
+    return string + status;
+  }
+
   public static void main(String[] args) {
     try (Synthesizer synthesizer = MidiSystem.getSynthesizer(); VirMidi virMidi = new VirMidi().open()) {
       synthesizer.open();
       final Receiver receiver = synthesizer.getReceiver();
-      virMidi.setReceiver(message -> receiver.send(message, -1));
+      virMidi.setReceiver(message -> {
+        if (message.getStatus() != ShortMessage.TIMING_CLOCK) System.out.println(toString(message));
+        receiver.send(message, -1);
+      });
       System.in.read();
       virMidi.setReceiver(null);
     } catch (MidiUnavailableException | IOException e) {
